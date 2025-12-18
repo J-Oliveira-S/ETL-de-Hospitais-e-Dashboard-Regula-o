@@ -1,0 +1,11 @@
+# Segurança: Nunca subir as credenciais
+.env
+
+# Ambiente Virtual: Pasta pesada e desnecessária no Git
+.venv/
+env/
+__pycache__/
+
+# Dados: Não subir arquivos CSV locais (muitas vezes contêm dados sensíveis)
+data/*.csv
+data/raw_unidades.csv  # (Opcional) Remova o "!" se não quiser subir nem o modelo

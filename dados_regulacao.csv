@@ -1,0 +1,6 @@
+id_paciente,nome_paciente,gravidade,unidade_origem,data_solicitacao
+101,Jose Silva,Alta,UPA Rocha Miranda,2025-12-15 08:30
+102,Maria Oliveira,Media,Hospital Municipal Souza Aguiar,2025-12-15 09:15
+103,Antonio Santos,Baixa,UPA Marechal Hermes,2025-12-14 22:00
+104,Ana Pereira,Alta,Hospital Salgado Filho,2025-12-16 07:45
+101,Jose Silva,Alta,UPA Rocha Miranda,2025-12-15 08:30
