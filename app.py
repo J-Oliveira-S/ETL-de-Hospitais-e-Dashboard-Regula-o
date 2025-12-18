@@ -5,90 +5,114 @@ from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
 
-# Configuração da página
-st.set_page_config(page_title="Painel Regulação RJ", layout="wide", page_icon="🏥")
+# 1. Estética e Configuração
+st.set_page_config(page_title="Monitor Regulação RJ", layout="wide", page_icon="📈")
 
-# Conexão com o Banco (Supabase)
+CORES_GRAVIDADE = {
+    "Vermelho": "#FF4B4B",
+    "Laranja": "#FFA500",
+    "Amarelo": "#F1C40F",
+    "Verde": "#2ECC71"
+}
+
+# Conexão
 load_dotenv()
 db_url = os.getenv('SUPABASE_DB_URL')
 if db_url and db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql+psycopg2://', 1)
-
 engine = create_engine(db_url)
 
-# Função para buscar dados cruzados (JOIN)
-@st.cache_data(ttl=60) 
-def get_combined_data():
+@st.cache_data(ttl=60)
+def get_data():
+    # JOIN focado em CAP e Coordenadas
     query = """
-    SELECT 
-        f.nome_anonimo, 
-        f.gravidade, 
-        f.procedimento_solicitado, 
-        f.data_solicitacao,
-        u.nome_unidade, 
-        u.bairro, 
-        u.telefone, 
-        u.endereco,
-        u.latitude,
-        u.longitude
-    FROM public.fila_regulacao f
-    JOIN public.unidades_saude u ON f.unidade_origem = u.nome_unidade;
+    SELECT f.*, u.cap, u.latitude, u.longitude 
+    FROM fila_regulacao f
+    LEFT JOIN unidades_saude u ON f.unidade_origem = u.nome_unidade
     """
-    return pd.read_sql(query, engine)
+    df = pd.read_sql(query, engine)
+    # Garante que a CAP seja tratada como texto/categoria
+    if 'cap' in df.columns:
+        df['cap'] = df['cap'].fillna('N/I').astype(str)
+    return df
 
-st.title("🏥 Gestão de Fluxo e Regulação - Rio de Janeiro")
-st.markdown(f"**Status da Rede:** Conectado ao Supabase (Ohio-US)")
+# --- INTERFACE ---
+df = get_data()
+
+st.title("🏥 Gestão de Fluxo por CAP - Regulação Rio")
 st.markdown("---")
 
-# Buscando os dados
-try:
-    df = get_combined_data()
+# --- MÉTRICAS DE TOPO (Focado em CAP e Criticidade) ---
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.metric("Total de Pacientes", len(df))
+with c2:
+    # Ajuste para capturar a prioridade máxima corretamente
+    criticos = len(df[df['gravidade'] == 'Vermelho'])
+    st.metric("🔴 Vaga Zero (Vermelho)", criticos)
+with c3:
+    cap_mais_lotada = df['cap'].value_counts().idxmax() if not df.empty else "N/A"
+    st.metric("📍 CAP em Alerta", f"CAP {cap_mais_lotada}")
+with c4:
+    st.metric("Unidades Solicitantes", df['unidade_origem'].nunique())
 
-    # 1. Métricas de Impacto
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.metric("Pacientes em Fila", len(df))
-    with m2:
-        # Conta pacientes com gravidade máxima (Vaga Zero)
-        vaga_zero = len(df[df['gravidade'].str.upper().str.contains('MÁXIMA|ALTA', na=False)])
-        st.metric("Prioridade Crítica", vaga_zero, delta_color="inverse")
-    with m3:
-        st.metric("Unidades com Pendência", df['nome_unidade'].nunique())
+st.markdown("---")
 
-    st.markdown("---")
+# --- ÁREA INTERATIVA: MAPA E FILTROS ---
+col_mapa, col_info = st.columns([2, 1])
 
-    # 2. Mapa de Calor (Onde estão os pacientes)
-    st.subheader("📍 Mapa de Concentração da Fila")
-    df_mapa = df.dropna(subset=['latitude', 'longitude'])
+with col_info:
+    st.subheader("🔍 Filtros Estratégicos")
+    # Filtro por CAP (O que você sugeriu como mais importante)
+    lista_caps = sorted(df['cap'].unique())
+    caps_selecionadas = st.multiselect("Selecionar CAPs", options=lista_caps, default=lista_caps)
+    
+    # Filtro por Gravidade
+    grav_selecionada = st.multiselect("Nível de Urgência", options=["Vermelho", "Laranja", "Amarelo", "Verde"], default=["Vermelho", "Laranja", "Amarelo", "Verde"])
+
+    # Aplicando filtros
+    df_filtrado = df[df['cap'].isin(caps_selecionadas) & df['gravidade'].isin(grav_selecionada)]
+
+with col_mapa:
+    st.subheader("📍 Distribuição Geográfica")
+    df_mapa = df_filtrado.dropna(subset=['latitude', 'longitude'])
+    
     if not df_mapa.empty:
-        st.map(df_mapa, latitude='latitude', longitude='longitude', size=20, color='#FF0000')
-    else:
-        st.info("Nenhum paciente na fila possui coordenadas mapeadas.")
-
-    # 3. Gráfico de Gravidade e Tabela Detalhada
-    col_esq, col_dir = st.columns([1, 2])
-
-    with col_esq:
-        st.subheader("📊 Nível de Gravidade")
-        fig = px.pie(df, names='gravidade', hole=0.4, color_discrete_sequence=px.colors.sequential.Reds)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col_dir:
-        st.subheader("📋 Lista Detalhada para Contato")
-        # Filtro rápido por bairro
-        bairro = st.selectbox("Filtrar por Bairro da Unidade", ["Todos"] + list(df['bairro'].unique()))
-        
-        df_display = df.copy()
-        if bairro != "Todos":
-            df_display = df_display[df_display['bairro'] == bairro]
-            
-        st.dataframe(
-            df_display[['nome_anonimo', 'gravidade', 'nome_unidade', 'bairro', 'telefone', 'procedimento_solicitado']], 
-            use_container_width=True
+        fig_mapa = px.scatter_mapbox(
+            df_mapa, lat="latitude", lon="longitude", 
+            color="gravidade", size_max=12, zoom=9,
+            hover_name="unidade_origem",
+            hover_data={"latitude": False, "longitude": False, "cap": True, "nome_anonimo": True},
+            color_discrete_map=CORES_GRAVIDADE,
+            mapbox_style="carto-darkmatter"
         )
+        fig_mapa.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=450)
+        st.plotly_chart(fig_mapa, use_container_width=True)
+    else:
+        st.warning("⚠️ Mapa indisponível: As unidades filtradas não possuem coordenadas GPS cadastradas.")
 
-except Exception as e:
-    st.error(f"Erro ao carregar dashboard: {e}")
-    st.info("Dica: Verifique se os nomes das unidades na Fila de Regulação são idênticos aos da tabela Unidades de Saúde.")
+# --- ANÁLISE POR CAP ---
+st.markdown("---")
+col_graf1, col_graf2 = st.columns(2)
 
-st.sidebar.button("🔄 Atualizar Dados")
+with col_graf1:
+    st.subheader("📊 Pacientes por CAP")
+    # Gráfico de barras por CAP
+    cap_dist = df_filtrado['cap'].value_counts().reset_index()
+    fig_bar = px.bar(cap_dist, x='cap', y='count', color='cap', title="Volume por Região Administrativa")
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+with col_graf2:
+    st.subheader("⚖️ Mix de Gravidade")
+    fig_pizza = px.pie(df_filtrado, names='gravidade', color='gravidade', 
+                       color_discrete_map=CORES_GRAVIDADE, hole=0.5)
+    st.plotly_chart(fig_pizza, use_container_width=True)
+
+# --- TABELA DE OPERAÇÃO ---
+st.subheader("📋 Fila de Espera Detalhada (Logística)")
+st.dataframe(
+    df_filtrado[['nome_anonimo', 'gravidade', 'cap', 'unidade_origem', 'procedimento_solicitado', 'data_solicitacao']], 
+    use_container_width=True, hide_index=True
+)
+
+st.sidebar.button("🔄 Atualizar Banco")

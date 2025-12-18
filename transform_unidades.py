@@ -10,13 +10,26 @@ BASE = Path(__file__).resolve().parent
 IN_PATH = BASE / "data" / "raw_unidades.csv"
 OUT_PATH = BASE / "data" / "unidades_transformed.csv"
 
+# MAPEAMENTO CORRIGIDO: X -> latitude, Y -> longitude
 COLUMN_MAP = {
-    'NOME': 'nome_unidade', 'TIPO_UNIDADE': 'tipo', 'ENDERECO': 'endereco',
-    'BAIRRO': 'bairro', 'TELEFONE': 'telefone', 'EMAIL': 'email',
-    'HORARIO_SEMANA': 'horario_semana', 'HORARIO_SABADO': 'horario_sabado',
-    'TIPO_ABC': 'tipo_abc', 'CNES': 'cnes', 'DATA_INAUGURACAO': 'data_inauguracao',
-    'Flg_Ativo': 'ativo', 'OBJECTID': 'objectid', 'GlobalID': 'globalid',
-    'X': 'longitude', 'Y': 'latitude', 'CAP': 'cap', 'EQUIPES': 'equipes'
+    'X': 'latitude', 
+    'Y': 'longitude',
+    'NOME': 'nome_unidade', 
+    'TIPO_UNIDADE': 'tipo', 
+    'ENDERECO': 'endereco',
+    'BAIRRO': 'bairro', 
+    'TELEFONE': 'telefone', 
+    'EMAIL': 'email',
+    'HORARIO_SEMANA': 'horario_semana', 
+    'HORARIO_SABADO': 'horario_sabado',
+    'TIPO_ABC': 'tipo_abc', 
+    'CNES': 'cnes', 
+    'DATA_INAUGURACAO': 'data_inauguracao',
+    'Flg_Ativo': 'ativo', 
+    'OBJECTID': 'objectid', 
+    'GlobalID': 'globalid',
+    'CAP': 'cap', 
+    'EQUIPES': 'equipes'
 }
 
 def to_bool(v):
@@ -33,25 +46,25 @@ def transform_data(df):
     # Mapeia colunas
     df = df.rename(columns=COLUMN_MAP)
     
-    # TRATAMENTO DE DATA (O erro atual)
+    # TRATAMENTO DE COORDENADAS (Latitude e Longitude)
+    for coord in ['latitude', 'longitude']:
+        if coord in df.columns:
+            # Substitui vírgula por ponto e converte para número
+            df[coord] = df[coord].astype(str).str.replace(',', '.')
+            df[coord] = pd.to_numeric(df[coord], errors='coerce')
+
+    # TRATAMENTO DE DATA
     if 'data_inauguracao' in df.columns:
-        # 1. Converte para datetime forçando erros a virarem NaT (Not a Time)
         df['data_inauguracao'] = pd.to_datetime(df['data_inauguracao'], errors='coerce')
-        # 2. Transforma em objeto de data puro (sem horas) ou None para o SQL
         df['data_inauguracao'] = df['data_inauguracao'].apply(lambda x: x.date() if pd.notnull(x) else None)
 
-    # TRATAMENTO DE NÚMEROS (Erro anterior do MEIER)
+    # TRATAMENTO DE NÚMEROS (Prevenção para o erro 'MEIER')
     if 'objectid' in df.columns:
         df['objectid'] = pd.to_numeric(df['objectid'], errors='coerce').astype('Int64')
     
     if 'cnes' in df.columns:
-        # Garante que CNES seja texto limpo de dígitos
         df['cnes'] = df['cnes'].astype(str).str.replace(r'\D', '', regex=True)
         df.loc[df['cnes'] == 'nan', 'cnes'] = None
-        
-    for coord in ['latitude', 'longitude']:
-        if coord in df.columns:
-            df[coord] = pd.to_numeric(df[coord], errors='coerce')
 
     # TRATAMENTO DE BOOLEANO (Ativo/Inativo)
     if 'ativo' in df.columns:
@@ -61,7 +74,7 @@ def transform_data(df):
     df['nome_unidade'] = df['nome_unidade'].astype(str).str.title()
     df['municipio'] = 'Rio de Janeiro'
     
-    # Remove linhas sem nome e seleciona colunas válidas
+    # Remove linhas sem nome e seleciona colunas válidas presentes no COLUMN_MAP
     df = df.dropna(subset=['nome_unidade'])
     valid_cols = [v for v in COLUMN_MAP.values() if v in df.columns]
     return df[valid_cols]
@@ -79,16 +92,16 @@ def load_to_db(df, table_name='unidades_saude'):
         conn.execute(text(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE;"))
     
     print(f"Inserindo {len(df)} registros...")
-    # O parâmetro dtype garante que as datas e booleanos sejam enviados corretamente
+    # Inserção direta do DataFrame para garantir tipos
     df.to_sql(table_name, con=engine, if_exists='append', index=False, method='multi')
-    print(f"🚀 SUCESSO ABSOLUTO! {len(df)} registros integrados.")
+    print(f"🚀 SUCESSO! {len(df)} registros integrados com coordenadas corrigidas.")
 
 def main():
     if not IN_PATH.exists():
         print(f"Arquivo não encontrado em: {IN_PATH}")
         return
     
-    print("Iniciando limpeza profunda da base de dados...")
+    print("Iniciando limpeza e correção geográfica da base...")
     df_raw = pd.read_csv(IN_PATH, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8-sig')
     
     df_clean = transform_data(df_raw)
