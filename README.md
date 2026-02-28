@@ -59,9 +59,16 @@ NUNCA salve dados bancários dentro de um repositório git. Para nossa aplicaç�
 
 1. Copie o arquivo providenciado `.env.example`.
 2. Renomeie o novo arquivo EXCLUSIVAMENTE para `.env`.
-3. Preencha os campos abaixo de acordo a URL fornecida pela plataforma de banco (Supabase / Neon / Local PgAdmin):
+3. Preencha os campos copiando a connection string da plataforma de banco (Supabase / Neon / Local PgAdmin).
+
+> **⚠️ Atenção: Conexão Supabase (IPv4 vs IPv6)**
+> O Supabase agora usa **IPv6** por padrão na porta `5432`. Se a sua rede de internet for **IPv4** (a maioria no Brasil), você obrigatoriamente precisa usar o **Connection Pooler** (porta `6543`).
+> 
+> Quando usar a porta **6543**, o seu usuário do banco deixa de ser apenas `postgres` e passa a ser `postgres.[seu-project-ref]`.
+> 
+> **Exemplo de URL Correta para IPv4:**
 ```env
-SUPABASE_DB_URL=postgresql://MEU_USUARIO:MINHA_SENHA@meu-host.supabase.co:5432/postgres?sslmode=verify-full
+SUPABASE_DB_URL=postgresql://postgres.ab12cd34ef56:MINHA_SENHA@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require
 ```
 
 ## 📈 Como Executar a Solução

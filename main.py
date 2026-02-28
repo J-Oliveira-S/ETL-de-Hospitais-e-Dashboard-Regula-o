@@ -14,6 +14,7 @@ Configure seu `.env` com a variável `SUPABASE_DB_URL` antes de rodar.
 from pathlib import Path
 import os
 import pandas as pd
+import sqlalchemy as sqla
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
@@ -72,13 +73,23 @@ def insert_into_db(df: pd.DataFrame, db_url: str):
     );
     """
 
-    with engine.begin() as conn:
-        conn.execute(text(create_table_sql))
-        print("Tabela 'fila_regulacao' verificada/creada (IF NOT EXISTS).")
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(create_table_sql))
+            print("Tabela 'fila_regulacao' verificada/criada (IF NOT EXISTS).")
 
-    # Inserir dados
-    df.to_sql("fila_regulacao", con=engine, if_exists="append", index=False, method="multi")
-    print(f"Inseridos {len(df)} registros em 'fila_regulacao'.")
+            # Inserir dados usando a conexão ativa (transaction)
+            df.to_sql("fila_regulacao", con=conn, if_exists="append", index=False, method="multi")
+            print(f"Inseridos {len(df)} registros em 'fila_regulacao'.")
+    except sqla.exc.OperationalError as e:
+        print("\n[ERRO DE CONEXÃO]")
+        print("Falha ao conectar no banco de dados. Se você está usando o Supabase, certifique-se de:")
+        print("1. Usar a porta 6543 (Pooler Mode) ao invés de 5432 se a sua rede for IPv4.")
+        print("2. O seu usuário deve ser no formato: postgres.[seu-project-ref] (para a porta 6543).")
+        print("3. A URL deve terminar com ?sslmode=require ou pgbouncer=true.")
+        print(f"\nDetalhes técnicos: {e}")
+    except Exception as e:
+        print(f"\n[ERRO] Ocorreu um problema ao inserir no banco: {e}")
 
 
 def main():
