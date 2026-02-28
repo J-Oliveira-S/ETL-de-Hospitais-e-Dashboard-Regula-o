@@ -29,4 +29,4 @@ CREATE TABLE unidades_saude (
     longitude FLOAT
 );
 
--- SELECT tipo, count(*) FROM unidades_saude GROUP BY tipo ORDER BY count(*) DESC;  isso nao esta funcionando pq alega ja ter 
+SELECT tipo, count(*) FROM unidades_saude GROUP BY tipo ORDER BY count(*) DESC; 

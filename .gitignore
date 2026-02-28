@@ -1,11 +1,16 @@
-# Segurança: Nunca subir as credenciais
+# Segurança Máxima: Nunca subir as chaves do ambiente de produção
 .env
 
-# Ambiente Virtual: Pasta pesada e desnecessária no Git
+# Ambiente Virtual Python e Cache: Reduz o tamanho do git desnecessariamente
 .venv/
 env/
 __pycache__/
 
-# Dados: Não subir arquivos CSV locais (muitas vezes contêm dados sensíveis)
+# Dados Sensíveis (LGPD): Proíbe categoricamente o Versionamento das planilhas hospitalares brutas.
 data/*.csv
-data/raw_unidades.csv  # (Opcional) Remova o "!" se não quiser subir nem o modelo
+data/raw_unidades.csv
+
+# Extensões IDE e OSX
+.vscode/
+.idea/
+.DS_Store
